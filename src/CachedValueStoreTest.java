@@ -40,11 +40,13 @@ class CachedValueStoreTest {
         CachedValueStore cache = new CachedValueStore(List.of(stores), 2);
         cache.put("1", "a");
         cache.put("2", "b");
+        fileStore.put("9","b");
         mapStore.delete("2");
-        fileStore.delete("3");
+        fileStore.delete("3"); //do nothing
         cache.put("3", "c");
         cache.put("5", "b");
         cache.put("7", "b");
+        cache.read("9");
         cache.put("2", "b");
         cache.put("6", "b");
 

@@ -5,7 +5,7 @@ import java.util.Map;
 
 public class CachedValueStore implements ValueStore {
 
-    // a list of all available value stores. list order should be kept.
+    // A list of all available value stores. list order should be kept.
      private List<ValueStore> valueStores;
      private int maxCachedItems;
     private final Map<String, String> cachedDataMap = new HashMap<>();
@@ -27,17 +27,24 @@ public class CachedValueStore implements ValueStore {
      */
     public String read(String key) {
         String cacheResult = cachedDataMap.get(key);
-        if(cacheResult == null){
+        if (cacheResult == null) {
             for (ValueStore valueStore : valueStores) {
                 String result = valueStore.read(key);
-                if (valueStore.read(key) == null)
+                if (result == null)
                     continue;
 
-                //update cache key list, move value to top
-                cacheOrder.remove(key);
+                //update cache key list, move value to top and check cache capacity
+                sustainCacheCapacity();
+                cachedDataMap.put(key, result);
                 cacheOrder.addFirst(key);
+
                 return result;
             }
+        } else {
+            // Update cache key list order, move value to top
+            // Complexity is O(N), can be improved by implementing Map to Doubly Linked List Node Pointer
+            cacheOrder.remove(key);
+            cacheOrder.addFirst(key);
         }
 
         return cacheResult;
@@ -48,12 +55,7 @@ public class CachedValueStore implements ValueStore {
      * Put <key, value> in first valueStores only. order is important.
      */
     public void put(String key, String value) {
-        if(cacheOrder.size() == maxCachedItems){
-            //if cache is full, remove last element from linkedList and from HashMap
-            String keyRemoved = cacheOrder.removeLast();
-            cachedDataMap.remove(keyRemoved);
-        }
-
+        sustainCacheCapacity();
         // add new cache on top of the list
         cacheOrder.addFirst(key);
         cachedDataMap.put(key, value);
@@ -73,6 +75,14 @@ public class CachedValueStore implements ValueStore {
         cacheOrder.remove(key);
         cachedDataMap.remove(key);
         valueStores.forEach(valueStore -> valueStore.delete(key));
+    }
+
+    private void sustainCacheCapacity(){
+        if(cacheOrder.size() == maxCachedItems){
+            //if cache is full, remove last element from linkedList and from HashMap
+            String keyRemoved = cacheOrder.removeLast();
+            cachedDataMap.remove(keyRemoved);
+        }
     }
 
     public List<ValueStore> getValueStores() {
