@@ -1,15 +1,24 @@
 import java.util.HashMap;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
+/*
+In order to maintain get, put and delete complexity as O(1) we're using HashMap pointing to the Nodes in the Doubly
+Linked List of key, value pairs.
+Having bidirectional connection between the Nodes allows us to remove elements from any position in the List in O(1).
+In addition to that, having key to Node relation in map allows us to access/modify any element in O(1).
+As read and put operations are in fact composition of previously described actions, we can perform both in O(1).
+ */
+
 public class CachedValueStore implements ValueStore {
+    // Dummy head and tail. In empty Cache head points to tail and vice versa
+    private final Node head = new Node("", "");
+    private final Node tail = new Node("", "");
 
     // A list of all available value stores. list order should be kept.
      private List<ValueStore> valueStores;
      private int maxCachedItems;
-    private final Map<String, String> cachedDataMap = new HashMap<>();
-    private final LinkedList<String> cacheOrder = new LinkedList<>();
+    private final Map<String, Node> cachedDataMap = new HashMap<>();
 
 
     /**
@@ -20,14 +29,22 @@ public class CachedValueStore implements ValueStore {
     public CachedValueStore(List<ValueStore> valueStore, int maxCachedItems) {
         this.valueStores = valueStore;
         this.maxCachedItems = maxCachedItems;
+        // Empty Cache in the beginning
+        this.head.next = this.tail;
+        this.tail.prev = this.head;
     }
 
     /**
      * Iterate on valueStores and find the first key that matches. order is important.
      */
     public String read(String key) {
-        String cacheResult = cachedDataMap.get(key);
-        if (cacheResult == null) {
+        // Found in cache, moving to the beginning of the linked list.
+        if (cachedDataMap.containsKey(key)) {
+            Node node = cachedDataMap.get(key);
+            remove(node);
+            insertFirst(node);
+            return node.value;
+        } else { // Found in valueStore, copying to cache
             for (ValueStore valueStore : valueStores) {
                 String result = valueStore.read(key);
                 if (result == null)
@@ -35,32 +52,29 @@ public class CachedValueStore implements ValueStore {
 
                 //update cache key list, move value to top and check cache capacity
                 sustainCacheCapacity();
-                cachedDataMap.put(key, result);
-                cacheOrder.addFirst(key);
+                insertFirst(new Node(key, result));
 
                 return result;
             }
-        } else {
-            // Update cache key list order, move value to top
-            // Complexity is O(N), can be improved by implementing Map to Doubly Linked List Node Pointer
-            cacheOrder.remove(key);
-            cacheOrder.addFirst(key);
         }
-
-        return cacheResult;
-
+        // Not found both in cache and in value store
+        return null;
     }
 
     /**
      * Put <key, value> in first valueStores only. order is important.
      */
     public void put(String key, String value) {
-        sustainCacheCapacity();
-        // add new cache on top of the list
-        cacheOrder.addFirst(key);
-        cachedDataMap.put(key, value);
+        // Moving to the top afterwards even if it's already in the list
+        if (cachedDataMap.containsKey(key)) {
+            remove(cachedDataMap.get(key));
+        }
 
-        //add value to first valueStore
+        // Sustaining max capacity
+        sustainCacheCapacity();
+        insertFirst(new Node(key, value));
+
+        // Add value to the first valueStore
         if (!valueStores.isEmpty()){
             valueStores.get(0).put(key, value);
         }
@@ -72,17 +86,33 @@ public class CachedValueStore implements ValueStore {
      * Iterate on valueStores and delete the key from all of them.
      */
     public void delete(String key) {
-        cacheOrder.remove(key);
-        cachedDataMap.remove(key);
+        if (cachedDataMap.containsKey(key)) {
+            Node node = cachedDataMap.get(key);
+            remove(node);
+        }
         valueStores.forEach(valueStore -> valueStore.delete(key));
     }
 
-    private void sustainCacheCapacity(){
-        if(cacheOrder.size() == maxCachedItems){
-            //if cache is full, remove last element from linkedList and from HashMap
-            String keyRemoved = cacheOrder.removeLast();
-            cachedDataMap.remove(keyRemoved);
+    private void sustainCacheCapacity() {
+        if (cachedDataMap.size() == maxCachedItems) {
+            remove(tail.prev);
         }
+    }
+
+    // Doubly Linked List removal
+    private void remove(Node node) {
+        cachedDataMap.remove(node.key);
+        node.prev.next = node.next;
+        node.next.prev = node.prev;
+    }
+
+    // Doubly linked list insertion to the head
+    private void insertFirst(Node node) {
+        cachedDataMap.put(node.key, node);
+        node.next = head.next;
+        node.next.prev = node;
+        head.next = node;
+        node.prev = head;
     }
 
     public List<ValueStore> getValueStores() {
@@ -99,5 +129,14 @@ public class CachedValueStore implements ValueStore {
 
     public void setMaxCachedItems(int maxCachedItems) {
         this.maxCachedItems = maxCachedItems;
+    }
+}
+
+class Node {
+    Node prev, next;
+    String key, value;
+    Node(String _key, String _value) {
+        key = _key;
+        value = _value;
     }
 }
